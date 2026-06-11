@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { runDeployment } from "@/lib/deploy-worker";
+import { exec as execCb } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(execCb)
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -29,19 +34,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!deployment) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   if (action === "restart") {
-    // TODO: trigger restart via Docker API through worker
-    const updated = await prisma.deployment.update({
-      where: { id: params.id },
-      data: { status: "QUEUED" },
+    const newDeployment = await prisma.deployment.create({
+      data: { projectId: deployment.projectId, status: "QUEUED", commitMessage: "Restart" }
     });
-    return NextResponse.json(updated);
+    setImmediate(() => { runDeployment(newDeployment.id).catch(console.error); });
+    return NextResponse.json(newDeployment);
   }
 
   if (action === "stop") {
-    // TODO: stop container via Docker API
+    const containerName = `buildos-proj-${deployment.projectId}`;
+    await execAsync(`docker rm -f ${containerName}`).catch(() => {});
     const updated = await prisma.deployment.update({
       where: { id: params.id },
-      data: { status: "STOPPED" },
+      data: { status: "STOPPED", finishedAt: new Date() }
     });
     return NextResponse.json(updated);
   }

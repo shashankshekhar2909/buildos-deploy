@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+const filters = ["All", "Running", "Building", "Deploying", "Failed", "Stopped", "Queued"] as const;
+type Filter = typeof filters[number];
 
-const filters = ["All", "Running", "Building", "Failed", "Stopped"];
+interface Props {
+  active: Filter;
+  onChange: (f: Filter) => void;
+}
 
-export function DeploymentFilters() {
-  const [active, setActive] = useState("All");
+export function DeploymentFilters({ active, onChange }: Props) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1.5 flex-wrap">
       {filters.map(f => (
-        <button key={f} onClick={() => setActive(f)}
+        <button key={f} onClick={() => onChange(f)}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             active === f
               ? "bg-accent text-white"

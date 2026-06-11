@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { runDeployment } from "@/lib/deploy-worker";
 import { z } from "zod";
 
 const createDeploymentSchema = z.object({
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest) {
       commitMessage: data.commitMessage,
     },
   });
+
+  // Fire-and-forget background build
+  setImmediate(() => { runDeployment(deployment.id).catch(console.error); });
 
   return NextResponse.json(deployment, { status: 201 });
 }
