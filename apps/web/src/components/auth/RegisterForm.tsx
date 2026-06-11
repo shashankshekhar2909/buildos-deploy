@@ -6,9 +6,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 const schema = z.object({
-  name: z.string().min(1, "Required").max(100),
+  name: z.string().min(1, "Required"),
   email: z.string().email("Invalid email"),
   password: z.string().min(8, "At least 8 characters"),
   confirmPassword: z.string(),
@@ -16,18 +17,13 @@ const schema = z.object({
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
-
 type FormData = z.infer<typeof schema>;
 
 export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, formState: { errors, isSubmitting } } =
+    useForm<FormData>({ resolver: zodResolver(schema) });
 
   const onSubmit = async (data: FormData) => {
     setError(null);
@@ -36,65 +32,40 @@ export function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: data.name, email: data.email, password: data.password }),
     });
+    if (!res.ok) { const b = await res.json(); setError(b.error || "Registration failed"); return; }
 
-    if (!res.ok) {
-      const body = await res.json();
-      setError(body.error || "Registration failed");
-      return;
-    }
-
-    // Auto sign-in after registration
-    const signInRes = await signIn("credentials", {
-      email: data.email,
-      password: data.password,
-      redirect: false,
-    });
-
-    if (signInRes?.error) {
-      onSuccess(); // redirect to sign-in tab
-    } else {
-      router.push("/dashboard");
-      router.refresh();
-    }
+    const signInRes = await signIn("credentials", { email: data.email, password: data.password, redirect: false });
+    if (signInRes?.error) onSuccess();
+    else { router.push("/dashboard"); router.refresh(); }
   };
 
   const fields = [
-    { name: "name" as const, label: "Full name", type: "text", placeholder: "Jane Smith", autoComplete: "name" },
-    { name: "email" as const, label: "Email", type: "email", placeholder: "you@example.com", autoComplete: "email" },
-    { name: "password" as const, label: "Password", type: "password", placeholder: "Min 8 characters", autoComplete: "new-password" },
-    { name: "confirmPassword" as const, label: "Confirm password", type: "password", placeholder: "••••••••", autoComplete: "new-password" },
+    { key: "name" as const,            label: "Full name",        type: "text",     placeholder: "Jane Smith",      auto: "name" },
+    { key: "email" as const,           label: "Email",            type: "email",    placeholder: "you@example.com", auto: "email" },
+    { key: "password" as const,        label: "Password",         type: "password", placeholder: "Min 8 characters",auto: "new-password" },
+    { key: "confirmPassword" as const, label: "Confirm password", type: "password", placeholder: "••••••••",        auto: "new-password" },
   ];
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      {fields.map((f) => (
-        <div key={f.name}>
-          <label className="block text-sm font-medium mb-1">{f.label}</label>
-          <input
-            {...register(f.name)}
-            type={f.type}
-            placeholder={f.placeholder}
-            autoComplete={f.autoComplete}
-            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-          {errors[f.name] && (
-            <p className="text-xs text-destructive mt-1">{errors[f.name]?.message}</p>
-          )}
+      {fields.map(f => (
+        <div key={f.key}>
+          <label className="label">{f.label}</label>
+          <input {...register(f.key)} type={f.type} placeholder={f.placeholder}
+            autoComplete={f.auto}
+            className={`input ${errors[f.key] ? "input-error" : ""}`} />
+          {errors[f.key] && <p className="text-xs text-danger-text mt-1">{errors[f.key]?.message}</p>}
         </div>
       ))}
 
       {error && (
-        <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
-          {error}
-        </p>
+        <div className="bg-danger/5 border border-danger/20 rounded-lg px-3 py-2.5">
+          <p className="text-sm text-danger-text">{error}</p>
+        </div>
       )}
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-      >
-        {isSubmitting ? "Creating account..." : "Create account"}
+      <button type="submit" disabled={isSubmitting} className="btn-primary btn-lg w-full mt-1">
+        {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating account...</> : "Create account"}
       </button>
     </form>
   );

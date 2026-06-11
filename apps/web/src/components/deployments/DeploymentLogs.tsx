@@ -2,27 +2,28 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { Terminal } from "lucide-react";
 
 export function DeploymentLogs({ deploymentId }: { deploymentId: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["logs", deploymentId],
-    queryFn: () => apiClient.get(`/api/logs/${deploymentId}`).then((r) => r.data),
+    queryFn: () => apiClient.get(`/api/logs/${deploymentId}`).then(r => r.data),
     refetchInterval: 3000,
   });
 
   return (
-    <div className="bg-card border border-border rounded-lg">
-      <div className="px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-sm">Logs</h3>
+    <div className="card overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+        <Terminal className="w-4 h-4 text-text-tertiary" />
+        <h3 className="text-sm font-medium text-text-secondary">Build & Runtime Logs</h3>
       </div>
-      <div className="bg-black/90 rounded-b-lg p-4 min-h-64 max-h-[600px] overflow-y-auto">
-        {isLoading ? (
-          <p className="text-gray-400 text-sm font-mono">Loading...</p>
-        ) : data?.logs ? (
-          <pre className="text-green-400 text-xs font-mono whitespace-pre-wrap">{data.logs}</pre>
-        ) : (
-          <p className="text-gray-500 text-sm font-mono">No logs yet.</p>
-        )}
+      <div className="log-output min-h-48 max-h-[500px]">
+        {isLoading
+          ? <span className="text-text-tertiary">Fetching logs...</span>
+          : data?.logs
+            ? data.logs
+            : <span className="text-text-tertiary">No logs yet. Waiting for deployment to start...</span>
+        }
       </div>
     </div>
   );
