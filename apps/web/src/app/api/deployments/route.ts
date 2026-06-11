@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 const createDeploymentSchema = z.object({
-  projectId: z.string().cuid(),
+  projectId: z.string(),
   commitSha: z.string().optional(),
   commitMessage: z.string().optional(),
 });
@@ -51,6 +51,5 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // TODO: enqueue to Redis/worker
   return NextResponse.json(deployment, { status: 201 });
 }

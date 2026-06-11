@@ -6,15 +6,15 @@ import { z } from "zod";
 
 const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
-  githubRepo: z.string().regex(/^[^/]+\/[^/]+$/),
+  githubRepo: z.string().min(1),
   branch: z.string().default("main"),
   buildCommand: z.string().optional(),
   startCommand: z.string().optional(),
-  port: z.number().int().min(1).max(65535).default(3000),
+  port: z.coerce.number().int().min(1).max(65535).default(3000),
   envVars: z.record(z.string()).optional(),
 });
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
