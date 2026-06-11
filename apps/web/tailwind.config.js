@@ -13,6 +13,7 @@ module.exports = {
         "surface-raised": "#1a1a1a",
         border: "#222222",
         "border-subtle": "#1a1a1a",
+        "surface-hover": "#161616",
         "text-primary": "#ededed",
         "text-secondary": "#888888",
         "text-tertiary": "#555555",
