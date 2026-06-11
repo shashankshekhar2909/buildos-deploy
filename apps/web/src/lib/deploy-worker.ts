@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { buildCloneUrl } from './git-url'
 import { spawn } from 'child_process'
 import { rm, mkdir } from 'fs/promises'
 import path from 'path'
@@ -38,11 +39,10 @@ export async function runDeployment(deploymentId: string): Promise<void> {
     await rm(workDir, { recursive: true, force: true })
     await mkdir(workDir, { recursive: true })
 
-    // git clone
-    const repoUrl = user.githubToken
-      ? `https://${user.githubToken}@github.com/${project.githubRepo}.git`
-      : `https://github.com/${project.githubRepo}.git`
-    await appendLog(deploymentId, `[BuildOS] Cloning ${project.githubRepo} (branch: ${project.branch})\n`)
+    // git clone — supports https, ssh, owner/repo shorthand
+    const repoUrl = buildCloneUrl(project.githubRepo, user.githubToken)
+    const displayUrl = project.githubRepo.replace(/https?:\/\/[^@]+@/, 'https://')
+    await appendLog(deploymentId, `[BuildOS] Cloning ${displayUrl} (branch: ${project.branch})\n`)
     const cloneCode = await runCmd('git', ['clone', '--depth=1', '--branch', project.branch, repoUrl, '.'], workDir, deploymentId)
     if (cloneCode !== 0) throw new Error('git clone failed')
 
