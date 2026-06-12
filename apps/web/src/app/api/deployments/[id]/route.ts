@@ -43,7 +43,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (action === "stop") {
     const containerName = `buildos-proj-${deployment.projectId}`;
-    await execAsync(`docker rm -f ${containerName}`).catch(() => {});
+    if ((deployment as any).deployMode === "COMPOSE") {
+      // compose projects need `down` not `rm -f`
+      await execAsync(`docker compose -p ${containerName} down --remove-orphans`).catch(() => {});
+    } else {
+      await execAsync(`docker rm -f ${containerName}`).catch(() => {});
+    }
     const updated = await prisma.deployment.update({
       where: { id: params.id },
       data: { status: "STOPPED", finishedAt: new Date() }

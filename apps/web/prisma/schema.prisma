@@ -88,6 +88,8 @@ model Deployment {
   containerId   String?
   url           String?
   logs          String?          @db.Text
+  hostPort      Int?
+  deployMode    String           @default("CONTAINER")
   startedAt     DateTime?
   finishedAt    DateTime?
   createdAt     DateTime         @default(now())
