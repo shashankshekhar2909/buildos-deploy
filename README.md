@@ -1,250 +1,74 @@
-# BuildOS Deploy
+# BuildOS
 
-Self-hosted, AI-native deployment platform for Docker infrastructure. Deploy any GitHub repo with a build command — think Vercel/Railway/Coolify but fully on your own hardware.
+Self-hosted deployment platform. Connect any Git repo → builds Docker image → runs container. Think Coolify/Railway on your own hardware.
 
----
+## Stack
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Hetzner VPS                        │
-│                                                         │
-│  ┌──────────┐    ┌──────────┐    ┌───────────────────┐  │
-│  │ Next.js  │───▶│ FastAPI  │───▶│  Celery Worker    │  │
-│  │  :3000   │    │  :8000   │    │  (build + deploy) │  │
-│  └──────────┘    └──────────┘    └───────────────────┘  │
-│       │               │                   │             │
-│  ┌────▼───────────────▼───────────────────▼──────────┐  │
-│  │         PostgreSQL   Redis   Docker Socket         │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐    │
-│  │  Traefik (reverse proxy + TLS termination)      │    │
-│  └─────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────┘
-         │
-         ▼ Cloudflare (DNS + DDoS protection)
-```
-
-**Stack:**
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 (App Router), Tailwind CSS, shadcn/ui |
-| Backend | FastAPI, SQLModel, Alembic |
-| Database | PostgreSQL 16 |
-| Queue | Redis 7 + Celery |
-| Runtime | Docker (build + container management) |
-| Proxy | Traefik v3 (auto TLS via Let's Encrypt) |
-| DNS | Cloudflare |
-| Hosting | Hetzner Cloud |
+| App | Next.js 14 (App Router + API routes) |
+| Auth | NextAuth v4 (credentials) |
+| Database | PostgreSQL 16 + Prisma 5 |
+| Queue | Redis 7 (reserved for jobs) |
+| Deploy engine | Node.js `child_process` → git clone → docker build → docker run |
+| Log streaming | Server-Sent Events (SSE) |
+| Runtime | Docker (host socket mounted) |
 
----
-
-## MVP Features
-
-- **Auth** — GitHub OAuth, session management
-- **Projects** — Connect any GitHub repo, configure branch / port / env vars / build command
-- **Deployments** — Push to deploy: clone → docker build → docker run pipeline
-- **Logs** — Build logs stored in DB; live container logs while running
-- **Domains** — Add custom domains per project (Cloudflare DNS automation)
-- **Controls** — Restart / Stop / Delete running containers
-
----
-
-## Repository Structure
-
-```
-buildos-deploy/
-├── apps/
-│   └── web/                   # Next.js 14 frontend
-│       ├── prisma/schema.prisma
-│       └── src/
-│           ├── app/           # App Router pages + API routes
-│           ├── components/    # UI components
-│           └── lib/           # auth, prisma, api-client
-├── services/
-│   └── api/                   # FastAPI backend
-│       └── app/
-│           ├── api/v1/        # REST endpoints
-│           ├── core/          # config, db, redis
-│           ├── models/        # SQLModel ORM models
-│           ├── services/      # docker_service, github_service
-│           └── workers/       # Celery deploy pipeline
-├── packages/
-│   └── types/                 # Shared TypeScript types
-├── docker-compose.yml         # Full local stack
-├── turbo.json
-└── pnpm-workspace.yaml
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- pnpm 9+
-- Python 3.11+
-- Docker + Docker Compose
-
-### 1. Clone & configure
+## Quick start (Docker Compose)
 
 ```bash
 git clone git@github.com:shashankshekhar2909/buildos-deploy.git
 cd buildos-deploy
-cp .env.example .env
+cp .env.example .env          # edit: set NEXTAUTH_SECRET + NEXTAUTH_URL
+docker compose up -d --build
 ```
 
-Edit `.env` — at minimum set:
-```env
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-NEXTAUTH_SECRET=<run: openssl rand -base64 32>
-```
+Runs migrations automatically on first boot (see `DEPLOY.md`).
 
-Create a GitHub OAuth App at https://github.com/settings/developers:
-- Homepage URL: `http://localhost:3000`
-- Callback URL: `http://localhost:3000/api/auth/callback/github`
+App available at `http://<host>:3008`.
 
-### 2. Start infrastructure
+Default login created by seed: `admin@buildos.local` / `buildos123`
+
+## Development
 
 ```bash
-docker compose up postgres redis -d
-```
+# Prerequisites: Node 20, pnpm 9, Docker, PostgreSQL 16 on :5432, Redis on :6381
 
-### 3. Install dependencies & migrate DB
-
-```bash
 pnpm install
-cd apps/web
-pnpm prisma migrate dev --name init
-cd ../..
+cp apps/web/.env.local.example apps/web/.env.local   # or see DEPLOY.md dev section
+cd apps/web && npx prisma migrate dev
+pnpm dev   # starts on :3008, bound to 0.0.0.0
 ```
 
-### 4. Run development servers
+## Deploying to a VPS
 
-```bash
-pnpm dev
-```
+See [DEPLOY.md](./DEPLOY.md) for complete step-by-step instructions (written for both humans and AI agents).
 
-- Web: http://localhost:3000
-- API: http://localhost:8000
-- API docs: http://localhost:8000/docs (DEBUG=true only)
-
-### 5. Start Celery worker (separate terminal)
-
-```bash
-cd services/api
-pip install uv && uv pip install --system -e .
-celery -A app.workers.deploy_worker.celery_app worker --loglevel=info
-```
-
----
-
-## Full Stack with Docker Compose
-
-Spin up everything (including web + api):
-
-```bash
-docker compose up --build
-```
-
-Services:
-| Service | Port |
-|---|---|
-| Web (Next.js) | 3000 |
-| API (FastAPI) | 8000 |
-| PostgreSQL | 5432 |
-| Redis | 6379 |
-| Traefik dashboard | 8080 |
-
----
-
-## Deployment
-
-### Recommended: Hetzner Cloud VPS
-
-**Why Hetzner:**
-- CX21 (2 vCPU, 4GB RAM) = ~€4/mo — plenty for MVP
-- Hetzner Volumes for DB persistence
-- Same region as Cloudflare EU routing
-
-**Setup on fresh Hetzner Ubuntu 22.04:**
-
-```bash
-# 1. Install Docker
-curl -fsSL https://get.docker.com | sh
-usermod -aG docker $USER
-
-# 2. Clone repo
-git clone git@github.com:shashankshekhar2909/buildos-deploy.git
-cd buildos-deploy
-
-# 3. Configure env for production
-cp .env.example .env
-# Edit .env — set real secrets, domain, Cloudflare token
-
-# 4. Deploy
-docker compose -f docker-compose.yml up -d --build
-```
-
-**Traefik TLS** — edit `docker-compose.yml` traefik command to add:
-```yaml
-- "--certificatesresolvers.letsencrypt.acme.email=your@email.com"
-- "--certificatesresolvers.letsencrypt.acme.storage=/certs/acme.json"
-- "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-```
-
-**Cloudflare:**
-1. Add A record → your Hetzner VPS IP
-2. Set SSL/TLS to Full (strict)
-3. Add `CLOUDFLARE_API_TOKEN` to `.env` for automatic domain management
-
-### CI/CD (optional)
-
-Add to `.github/workflows/deploy.yml`:
-```yaml
-- name: Deploy to Hetzner
-  run: |
-    ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} \
-      "cd buildos-deploy && git pull && docker compose up -d --build"
-```
-
----
-
-## Environment Variables
+## Environment variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `REDIS_URL` | ✅ | Redis connection string |
-| `NEXTAUTH_SECRET` | ✅ | Random secret for session encryption |
-| `NEXTAUTH_URL` | ✅ | Full URL of the web app |
-| `GITHUB_CLIENT_ID` | ✅ | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | ✅ | GitHub OAuth app client secret |
-| `API_URL` | ✅ | URL of the FastAPI service |
-| `API_SECRET_KEY` | ✅ | Used for webhook signature verification |
-| `CLOUDFLARE_API_TOKEN` | ⬜ | For automatic DNS record creation |
-| `CLOUDFLARE_ZONE_ID` | ⬜ | Cloudflare zone for your domain |
-| `HETZNER_API_TOKEN` | ⬜ | For VPS provisioning via API |
+| `NEXTAUTH_SECRET` | ✅ | Random string — `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | ✅ | Full public URL, e.g. `http://1.2.3.4:3008` |
+| `DATABASE_URL` | auto | Set by compose; override for external DB |
+| `REDIS_URL` | auto | Set by compose; override for external Redis |
 
----
+## Features
+
+- Create projects from any Git URL (HTTPS, SSH, `owner/repo` shorthand)
+- Single-`Dockerfile` apps: auto-selects a free host port, maps to container port
+- `docker-compose.yml` apps: runs `docker compose up --build -d` — full multi-container support
+- Real-time build logs via SSE
+- Environment variables per project (persisted in DB)
+- GitHub PAT injection for private repos
+- Deploy / Restart / Stop controls
+- Project deletion with confirmation
+- Password change + account settings
 
 ## Roadmap
 
-- [ ] Alembic migrations (replace `init_db`)
-- [ ] Real-time log streaming via WebSocket
-- [ ] GitHub webhook auto-setup on project create
+- [ ] GitHub webhook auto-deploy on push
 - [ ] Cloudflare DNS automation on domain add
-- [ ] Project environment variable encryption (KMS/Vault)
-- [ ] Multi-user / team support
 - [ ] Metrics dashboard (CPU/mem per container)
 - [ ] AI-assisted Dockerfile generation
-
----
-
-## License
-
-MIT
+- [ ] Team / multi-user support
