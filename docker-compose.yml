@@ -30,80 +30,29 @@ services:
       timeout: 5s
       retries: 5
 
-  api:
+  web:
     build:
-      context: ./services/api
+      context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql+asyncpg://buildos:buildos@postgres:5432/buildos
-      REDIS_URL: redis://redis:6379
-      DEBUG: "true"
-    ports:
-      - "8000:8000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./services/api:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - .env
-
-  worker:
-    build:
-      context: ./services/api
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    command: celery -A app.workers.deploy_worker.celery_app worker --loglevel=info --concurrency=4
     environment:
       DATABASE_URL: postgresql://buildos:buildos@postgres:5432/buildos
       REDIS_URL: redis://redis:6379
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3008}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      NODE_ENV: production
+    ports:
+      - "3008:3008"
     volumes:
+      # deploy worker needs docker socket to spawn containers
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./services/api:/app
+      - /tmp:/tmp
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file:
-      - .env
-
-  web:
-    build:
-      context: ./apps/web
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-    ports:
-      - "3000:3000"
-    depends_on:
-      - api
-    env_file:
-      - .env
-
-  traefik:
-    image: traefik:v3.0
-    restart: unless-stopped
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-    ports:
-      - "80:80"
-      - "443:443"
-      - "8080:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik_certs:/certs
 
 volumes:
   postgres_data:
   redis_data:
-  traefik_certs:
